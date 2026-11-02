@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#173f31">
+<meta name="description" content="Pocket flashcards for jokes, poems and shayari.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>FlashDeck</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: a full-height vertical feed of playing cards on card-table felt, one card per screen. A slide-out menu holds the folding tree: sections > categories > subcategories. */
+:root{
+  --felt:#215c47; --felt-deep:#173f31; --on-felt:#eef4ef; --on-felt-dim:#b9cfc4;
+  --card:#fbf8f1; --card-edge:#e4ddcc; --ink:#1d1e1c; --muted:#6d6a60; --tint:#efe8d6;
+  --red:#c2362f; --gold:#d9a531; --chip:#2c6e57;
+  --f-display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --f-body:"Instrument Sans",ui-sans-serif,system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --felt:#0f2a21; --felt-deep:#0a1e17; --on-felt:#e6eee9; --on-felt-dim:#8fa89b;
+  --card:#1e2421; --card-edge:#2f3833; --ink:#ecebe4; --muted:#9ba49e; --tint:#28322d;
+  --red:#f0756d; --gold:#e8c062; --chip:#1b4234; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --felt:#0f2a21; --felt-deep:#0a1e17; --on-felt:#e6eee9; --on-felt-dim:#8fa89b;
+  --card:#1e2421; --card-edge:#2f3833; --ink:#ecebe4; --muted:#9ba49e; --tint:#28322d;
+  --red:#f0756d; --gold:#e8c062; --chip:#1b4234; color-scheme:dark}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-size:14px;-webkit-text-size-adjust:100%}
+[hidden]{display:none!important}
+body{background:radial-gradient(120% 80% at 50% 0%,var(--felt),var(--felt-deep));background-color:var(--felt-deep);color:var(--on-felt);font-family:var(--f-body);overflow:hidden}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--felt-deep)}
+button,select,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+/* ---------- top bar ---------- */
+header{position:fixed;top:env(safe-area-inset-top,0px);left:0;right:0;z-index:5;background:linear-gradient(var(--felt-deep) 70%,transparent);padding-block:10px 18px}
+.bar{display:flex;align-items:center;gap:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.iconbtn{border:1px solid color-mix(in srgb,var(--on-felt) 25%,transparent);background:transparent;border-radius:999px;height:38px;min-width:38px;padding:0;display:grid;place-items:center;cursor:pointer;flex:none;font-size:20px;line-height:1}
+.iconbtn.add{background:var(--gold);border-color:var(--gold);color:#1d1e1c;font-weight:500}
+.burger{display:grid;gap:4px;width:16px}.burger i{display:block;height:2px;border-radius:2px;background:currentColor}
+.where{flex:1;min-width:0;border:0;background:none;text-align:left;cursor:pointer;padding:2px 4px;display:grid;line-height:1.15}
+.where .ws{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--on-felt-dim);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.where .wc{font-family:var(--f-display);font-weight:800;font-size:19px;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.where .wc .n{font-family:var(--f-mono);font-weight:500;font-size:12px;color:var(--on-felt-dim);margin-left:6px;letter-spacing:0}
+select.sort{background:var(--chip);border:0;border-radius:999px;height:38px;padding:0 8px;font-size:13px;color:var(--on-felt);flex:none}
+
+/* ---------- feed & cards ---------- */
+#feed{position:absolute;inset:0;overflow-y:auto;scroll-snap-type:y mandatory;overscroll-behavior:contain}
+.slot{height:100%;scroll-snap-align:start;scroll-snap-stop:always;display:flex;align-items:center;justify-content:center;box-sizing:border-box;
+  padding-block:calc(env(safe-area-inset-top,0px) + 74px) calc(env(safe-area-inset-bottom,0px) + 22px);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.card{position:relative;width:100%;max-width:420px;height:100%;max-height:620px;background:var(--card);color:var(--ink);
+  border-radius:18px;border:1px solid var(--card-edge);box-shadow:0 18px 40px -18px rgba(0,0,0,.55),0 2px 0 var(--card-edge);
+  display:grid;grid-template-rows:auto minmax(0,1fr) auto;padding:20px 22px 18px;box-sizing:border-box;min-width:0}
+.idx{position:absolute;font-family:var(--f-mono);font-weight:700;line-height:1;text-align:center;font-size:17px}
+.idx span{display:block;font-size:18px;margin-top:2px}
+.idx.tl{top:14px;left:14px}.idx.br{bottom:14px;right:14px;transform:rotate(180deg)}
+.red{color:var(--red)}
+.cat{justify-self:center;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:2px 34px 0;text-align:center}
+.body{display:flex;flex-direction:column;justify-content:center;gap:22px;min-width:0;min-height:0;overflow-y:auto;cursor:pointer;padding:8px 18px;-webkit-tap-highlight-color:transparent}
+.body.static{cursor:default}
+.q{font-family:var(--f-display);font-weight:700;font-size:clamp(23px,6.4vw,30px);line-height:1.18;letter-spacing:-.015em;text-wrap:balance;margin:0;overflow-wrap:anywhere;white-space:pre-line}
+.q.long{font-size:clamp(18px,4.8vw,21px);font-weight:500;line-height:1.5;letter-spacing:0;text-wrap:pretty}
+.a{font-family:var(--f-display);font-weight:500;font-size:clamp(19px,5.2vw,24px);line-height:1.3;margin:0;color:var(--red);text-wrap:balance;overflow-wrap:anywhere;white-space:pre-line}
+.a.long{font-size:clamp(16px,4.4vw,19px);line-height:1.5;text-wrap:pretty}
+.hint{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.hint::before{content:"";width:22px;height:1px;background:currentColor}
+.foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 26px 0 2px;flex-wrap:wrap}
+.stars{display:flex;gap:2px}
+.star{border:0;background:none;padding:4px;font-size:25px;line-height:1;cursor:pointer;color:var(--card-edge);transition:transform .12s}
+.star.on{color:var(--gold)}
+.star:active{transform:scale(1.25)}
+.rlabel{font-size:12px;color:var(--muted);font-family:var(--f-mono)}
+.del{border:0;background:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;padding:4px}
+.del.arm{color:var(--red);font-weight:600;text-decoration:none}
+.empty{height:100%;display:flex;flex-direction:column;gap:14px;align-items:center;justify-content:center;text-align:center;padding-inline:32px;color:var(--on-felt-dim);box-sizing:border-box}
+.empty p{margin:0;max-width:30ch;line-height:1.5}
+.empty .btn{background:var(--card);color:var(--ink)}
+.sync{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 4px);font-size:10.5px;font-family:var(--f-mono);color:var(--on-felt-dim);z-index:4;pointer-events:none;white-space:nowrap}
+
+/* ---------- menu drawer ---------- */
+.drawer{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.5)}
+.dpanel{position:absolute;top:0;bottom:0;left:0;width:min(88vw,370px);background:var(--card);color:var(--ink);display:flex;flex-direction:column;box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);
+  box-shadow:12px 0 40px -10px rgba(0,0,0,.5);animation:slide .22s ease-out}
+@keyframes slide{from{transform:translateX(-100%)}to{transform:none}}
+.dhead{display:flex;align-items:center;gap:8px;padding:14px 12px 10px 18px;border-bottom:1px solid var(--card-edge)}
+.dhead h2{margin:0;flex:1;font-family:var(--f-display);font-size:20px;font-weight:800}
+.pill{border:1px solid var(--card-edge);background:transparent;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink)}
+.pill[aria-pressed="true"]{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.xbtn{border:0;background:none;font-size:22px;width:36px;height:36px;cursor:pointer;color:var(--muted)}
+.dopts{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 18px;border-bottom:1px solid var(--card-edge);font-size:14px}
+.switch{position:relative;width:42px;height:24px;flex:none}
+.switch input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
+.switch span{position:absolute;inset:0;border-radius:999px;background:var(--card-edge);transition:background .15s;pointer-events:none}
+.switch span::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}
+.switch input:checked + span{background:var(--felt)}
+.switch input:checked + span::after{transform:translateX(18px)}
+.dscroll{flex:1;overflow-y:auto;padding:6px 0 16px}
+.trow{display:flex;align-items:center;gap:2px;min-height:44px;padding-right:10px;padding-left:calc(6px + var(--d,0) * 20px)}
+.trow.sel{background:var(--tint)}
+.trow.sel .tname{font-weight:700}
+.fold{width:30px;height:36px;border:0;background:none;cursor:pointer;color:var(--muted);flex:none;display:grid;place-items:center;font-size:11px}
+.fold span{display:inline-block;transition:transform .15s}
+.fold[aria-expanded="true"] span{transform:rotate(90deg)}
+.fold.none{visibility:hidden}
+.tname{flex:1;min-width:0;border:0;background:none;text-align:left;cursor:pointer;padding:10px 4px;font-size:15px;overflow-wrap:anywhere;color:var(--ink)}
+.trow.sec .tname{font-family:var(--f-display);font-weight:800;font-size:17px}
+.trow.best .tname{color:var(--muted)}
+.cnt{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);min-width:22px;text-align:right}
+.suit{font-size:13px;width:16px;text-align:center;flex:none}
+.tadd{width:32px;height:32px;border-radius:50%;border:1px dashed color-mix(in srgb,var(--ink) 35%,transparent);background:none;cursor:pointer;color:var(--muted);flex:none;font-size:17px;line-height:1;margin-left:4px}
+.tadd:hover{color:var(--ink);border-style:solid}
+.tag18{font-size:10px;font-weight:700;border:1px solid var(--card-edge);border-radius:6px;padding:1px 5px;color:var(--muted);background:none;cursor:default;flex:none;margin-left:4px}
+button.tag18{cursor:pointer}
+button.tag18[aria-pressed="true"]{background:var(--red);border-color:var(--red);color:#fff}
+.rm{border:0;background:none;color:var(--red);font-size:12px;font-weight:600;cursor:pointer;padding:4px 6px;white-space:nowrap;flex:none}
+.rm:disabled{color:var(--muted);opacity:.5;cursor:default;font-weight:500}
+.inl{display:flex;gap:6px;align-items:center;padding:6px 12px 8px calc(36px + var(--d,0) * 20px)}
+.inl input{flex:1;min-width:0;border:1px solid var(--felt);border-radius:10px;padding:9px 10px;font-size:16px;background:transparent;color:var(--ink)}
+.inl .ok{border:0;background:var(--felt);color:#eef4ef;border-radius:10px;padding:9px 12px;font-weight:600;cursor:pointer;flex:none}
+.inl .no{border:0;background:none;color:var(--muted);cursor:pointer;font-size:18px;width:30px;flex:none}
+.newsec{margin:10px 18px 0;border:1px dashed color-mix(in srgb,var(--ink) 35%,transparent);border-radius:12px;background:none;padding:12px;font-weight:600;color:var(--muted);cursor:pointer;width:calc(100% - 36px)}
+.dnote{font-size:12px;color:var(--muted);padding:8px 18px 0;line-height:1.45}
+
+/* ---------- add-card sheet ---------- */
+.sheet{position:fixed;inset:0;z-index:25;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}
+.panel{background:var(--card);color:var(--ink);width:100%;max-width:480px;max-height:90%;overflow-y:auto;border-radius:18px 18px 0 0;box-sizing:border-box;
+  padding-block:18px calc(env(safe-area-inset-bottom,0px) + 18px);padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px));display:grid;gap:12px}
+.panel h2{margin:0;font-family:var(--f-display);font-size:20px}
+.panel label{display:grid;gap:5px;font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.panel select,.panel textarea{border:1px solid var(--card-edge);background:transparent;border-radius:10px;padding:10px;font-size:16px;text-transform:none;letter-spacing:0;color:var(--ink);font-weight:400;min-width:0}
+.panel select option{background:var(--card);color:var(--ink)}
+.panel textarea{resize:vertical;min-height:58px}
+.panel textarea#f-a{min-height:90px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.two>*{min-width:0}
+.row{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.btn{border:0;border-radius:999px;padding:10px 18px;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--felt);color:#eef4ef}
+.btn.primary:disabled{opacity:.45;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--muted)}
+.note{font-size:13px;color:var(--red);line-height:1.4}
+.linkbtn{border:0;background:none;color:var(--felt);font-weight:600;text-decoration:underline;cursor:pointer;padding:0}
+@media (prefers-reduced-motion:reduce){.star,.fold span,.switch span,.switch span::after{transition:none}.dpanel{animation:none}}
+.dfoot{display:flex;gap:8px;padding:10px 18px 12px;border-top:1px solid var(--card-edge)}
+.dfoot .pill{flex:1}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 28px);background:var(--ink);color:var(--card);padding:10px 16px;border-radius:999px;font-size:13px;z-index:40;max-width:calc(100% - 32px);text-align:center}
+</style>
+</head>
+<body>
+
+<header id="head">
+  <div class="bar">
+    <button class="iconbtn" id="menu" aria-label="Open menu"><span class="burger"><i></i><i></i><i></i></span></button>
+    <button class="where" id="where" aria-label="Open menu"><span class="ws" id="w-sec"></span><span class="wc" id="w-cat"></span></button>
+    <select class="sort" id="sort" aria-label="Order">
+      <option value="shuffle">Shuffle</option>
+      <option value="top">Top rated</option>
+      <option value="unrated">Unrated</option>
+      <option value="deck">In order</option>
+    </select>
+    <button class="iconbtn add" id="add" aria-label="Add a card">+</button>
+  </div>
+</header>
+<main id="feed"></main>
+<div class="sync" id="sync">Tap a card to reveal · swipe up for the next one</div>
+<div class="toast" id="toast" hidden></div>
+
+<div class="drawer" id="drawer" hidden>
+  <nav class="dpanel" aria-label="Sections and categories">
+    <div class="dhead">
+      <h2>Decks</h2>
+      <button class="pill" id="edit" aria-pressed="false">Edit</button>
+      <button class="xbtn" id="dclose" aria-label="Close menu">×</button>
+    </div>
+    <div class="dopts">
+      <span>Clean only <span style="color:var(--muted);font-size:12px">· hides 18+ categories</span></span>
+      <label class="switch"><input type="checkbox" id="safe" aria-label="Clean only"><span></span></label>
+    </div>
+    <div class="dscroll" id="tree"></div>
+    <div class="dfoot">
+      <button class="pill" id="export">Export backup</button>
+      <button class="pill" id="import">Import backup</button>
+      <input type="file" id="importfile" accept="application/json,.json" hidden>
+    </div>
+  </nav>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <form class="panel" id="form-card" role="dialog" aria-modal="true" aria-label="Add a card">
+    <h2>New card</h2>
+    <div class="two">
+      <label>Section<select id="f-sec"></select></label>
+      <label>Category<select id="f-cat"></select></label>
+    </div>
+    <div class="note" id="f-nocat" hidden>This section has no categories yet. <button type="button" class="linkbtn" id="f-mkcat">Add one in the menu</button></div>
+    <label>Front (setup, title or first line)<textarea id="f-q" required></textarea></label>
+    <label>Back (optional)<textarea id="f-a" placeholder="Punchline, or the rest of the poem. Leave empty to show the front in full."></textarea></label>
+    <div class="row"><button type="button" class="btn ghost" id="f-cancel">Cancel</button><button class="btn primary" id="f-submit" type="submit">Add card</button></div>
+  </form>
+</div>
+
+<script>
+/* Built-in jokes live in jokes.json: [{id, cat, q, a, t}] where t holds space-separated tags ("clean" = safe for Clean only). */
+const BUILT_SECTIONS = [{id:"jokes", name:"Jokes", builtin:true}];
+const ADULT_CATS = ["Dirty","Pickup lines"];
+let BUILT_CATS = [], BASE = [];
+function loadBuiltins(raw){
+  BUILT_CATS = [...new Set(raw.map(j=>j.cat))].map(n=>({id:"b:"+n, name:n, section:"jokes", parent:null, adult:ADULT_CATS.includes(n), builtin:true}));
+  BASE = raw.map(j=>({...j, cat:"b:"+j.cat, section:"jokes"}));
+}
+const SUITS = ["♠","♥","♦","♣"];
+const RANK = n => ({1:"A",11:"J",12:"Q",13:"K"})[n] || String(n);
+const LABELS = ["","Bombed","Meh","Got a smile","Good laugh","Killed it"];
+const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const $ = id => document.getElementById(id);
+const store = { get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } }, set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} } };
+
+function normalize(s){
+  s = s||{};
+  const out = {ratings:s.ratings||{}, custom:s.custom||[], sections:s.sections||[], cats:s.cats||[]};
+  out.custom.forEach(j=>{ if(!j.section){ j.section="jokes"; if(j.cat && !j.cat.includes(":")) j.cat="b:"+j.cat; } });
+  return out;
+}
+let state = normalize(store.get("jokedeck", null));
+let view = Object.assign({section:"jokes", top:"All", sub:null}, store.get("jokedeck-view", {}));
+let safe = store.get("jokedeck-safe", "0")==="1" || store.get("jokedeck-safe", 0)===1;
+let open = new Set(store.get("jokedeck-open", ["jokes"]));
+let sortMode="shuffle", order=[], revealed=new Set(), docRef=null, saveTimer=null, editMode=false, adding=null;
+
+const sections = () => BUILT_SECTIONS.concat(state.sections);
+const cats = () => BUILT_CATS.concat(state.cats);
+const items = () => BASE.concat(state.custom);
+const secById = id => sections().find(s=>s.id===id);
+const catById = id => cats().find(c=>c.id===id);
+const kids = (sec, parent) => cats().filter(c=>c.section===sec && (c.parent||null)===(parent||null));
+const isAdult = id => { const c=catById(id); return !!c && (c.adult || (!!c.parent && isAdult(c.parent))); };
+const isClean = j => j.custom ? !isAdult(j.cat) : /\bclean\b/.test(j.t||"");
+const shown = j => !safe || isClean(j);
+const topOf = id => { const c=catById(id); return c ? (c.parent||c.id) : null; };
+const pathName = id => { const c=catById(id); if(!c) return "Uncategorized"; const p=c.parent&&catById(c.parent); return p ? p.name+" › "+c.name : c.name; };
+const suitFor = (sec, topId) => SUITS[Math.max(0, kids(sec).findIndex(c=>c.id===topId)) % 4];
+const vis = () => items().filter(shown);
+
+function validView(){
+  if(!secById(view.section)) view={section:"jokes", top:"All", sub:null};
+  if(view.top!=="All" && view.top!=="Top" && !kids(view.section).some(c=>c.id===view.top)) { view.top="All"; view.sub=null; }
+  if(view.sub && !catById(view.sub)) view.sub=null;
+  if(safe && view.top!=="All" && view.top!=="Top" && isAdult(view.sub||view.top)) { view.top="All"; view.sub=null; }
+  store.set("jokedeck-view", view);
+}
+function matches(j, v){
+  const r = state.ratings[j.id]||0;
+  return j.section===v.section && (v.top==="All" || (v.top==="Top" ? r>=4 : v.sub ? j.cat===v.sub : topOf(j.cat)===v.top));
+}
+function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){const k=Math.floor(Math.random()*(i+1));[a[i],a[k]]=[a[k],a[i]];} return a; }
+function arrange(){
+  validView();
+  const p = vis().filter(j=>matches(j,view)), r = j => state.ratings[j.id]||0;
+  if(sortMode==="shuffle") order = shuffle(p);
+  else if(sortMode==="top") order = p.slice().sort((a,b)=>r(b)-r(a));
+  else if(sortMode==="unrated") order = p.slice().sort((a,b)=>(r(a)>0)-(r(b)>0));
+  else order = p;
+}
+
+/* ---------- header ---------- */
+function renderWhere(){
+  $("w-sec").textContent = secById(view.section).name + (view.sub ? " › "+catById(view.top).name : "");
+  const label = view.top==="All" ? "All cards" : view.top==="Top" ? "★ My best" : view.sub ? catById(view.sub).name : catById(view.top).name;
+  const wc=$("w-cat"); wc.textContent=label;
+  const n=document.createElement("span"); n.className="n"; n.textContent=order.length; wc.append(n);
+}
+
+/* ---------- cards ---------- */
+function starRow(j, wrap, label){
+  wrap.innerHTML="";
+  const v = state.ratings[j.id]||0;
+  for(let i=1;i<=5;i++){
+    const s=document.createElement("button"); s.className="star"+(i<=v?" on":""); s.textContent="★";
+    s.setAttribute("aria-label", i+" star"+(i>1?"s":"")+": "+LABELS[i]);
+    s.onclick=e=>{ e.stopPropagation(); if(state.ratings[j.id]===i) delete state.ratings[j.id]; else state.ratings[j.id]=i; starRow(j,wrap,label); save(); };
+    wrap.append(s);
+  }
+  label.textContent = v ? LABELS[v] : (j.section==="jokes" ? "Rate it after you tell it" : "Rate it");
+}
+function armThen(btn, label, fn){
+  if(!btn.classList.contains("arm")){ btn.classList.add("arm"); btn.textContent="Tap again"; setTimeout(()=>{ btn.classList.remove("arm"); btn.textContent=label; },3000); return; }
+  fn();
+}
+function cardEl(j){
+  const su = suitFor(j.section, topOf(j.cat)), red = su==="♥"||su==="♦";
+  const rk = RANK(items().filter(x=>x.cat===j.cat).indexOf(j)+1);
+  const slot=document.createElement("section"); slot.className="slot";
+  const card=document.createElement("article"); card.className="card";
+  card.innerHTML = `<div class="idx tl ${red?"red":""}">${rk}<span>${su}</span></div><div class="idx br ${red?"red":""}">${rk}<span>${su}</span></div>`;
+  const cat=document.createElement("div"); cat.className="cat"; cat.textContent=pathName(j.cat)+(j.custom?" · yours":"");
+  const body=document.createElement("div"); body.className="body";
+  const q=document.createElement("p"); q.className="q"; q.textContent=j.q;
+  if(j.q.length>110 || (j.q.match(/\n/g)||[]).length>=2) q.classList.add("long");
+  body.append(q);
+  if(j.a){
+    body.tabIndex=0; body.setAttribute("role","button");
+    const a=document.createElement("p"); a.className="a"; a.textContent=j.a;
+    if(j.a.length>110 || (j.a.match(/\n/g)||[]).length>=2) a.classList.add("long");
+    const hint=document.createElement("div"); hint.className="hint"; hint.textContent="Tap to reveal";
+    const show=()=>{ const on=revealed.has(j.id); a.hidden=!on; hint.hidden=on; body.setAttribute("aria-label", on?"Hide back":"Reveal back"); };
+    body.onclick=()=>{ revealed.has(j.id)?revealed.delete(j.id):revealed.add(j.id); show(); };
+    body.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); body.click(); } };
+    body.append(a,hint); show();
+  } else body.classList.add("static");
+  const foot=document.createElement("div"); foot.className="foot";
+  const stars=document.createElement("div"); stars.className="stars";
+  const label=document.createElement("div"); label.className="rlabel";
+  const left=document.createElement("div"); left.style.cssText="display:grid;gap:2px"; left.append(stars,label);
+  foot.append(left); starRow(j,stars,label);
+  if(j.custom){
+    const d=document.createElement("button"); d.className="del"; d.textContent="Delete";
+    d.onclick=()=>armThen(d,"Delete",()=>{ state.custom=state.custom.filter(x=>x.id!==j.id); delete state.ratings[j.id]; save(); order=order.filter(x=>x.id!==j.id); render(false); });
+    foot.append(d);
+  }
+  card.append(cat,body,foot); slot.append(card); return slot;
+}
+function render(toTop){
+  renderWhere();
+  const feed=$("feed"), y=feed.scrollTop; feed.innerHTML="";
+  if(!order.length){
+    const e=document.createElement("div"); e.className="empty";
+    const p=document.createElement("p"); const b=document.createElement("button"); b.className="btn";
+    if(kids(view.section).length===0){ p.textContent="This section is empty. Add a category first, like Love, Friendship or Funny."; b.textContent="Add a category"; b.onclick=()=>{ adding={type:"cat", sec:view.section}; open.add(view.section); openDrawer(); }; }
+    else if(view.top==="Top"){ p.textContent="No 4- or 5-star cards here yet. Rate cards and your best ones collect here."; b.hidden=true; }
+    else { p.textContent="No cards here yet."; b.textContent="Add a card"; b.onclick=openSheet; }
+    e.append(p,b); feed.append(e); return;
+  }
+  order.forEach(j=>feed.append(cardEl(j)));
+  feed.scrollTop = toTop ? 0 : y;
+}
+function go(v){ view=v; arrange(); render(true); closeDrawer(); }
+
+/* ---------- menu tree ---------- */
+function toggleOpen(id){ open.has(id)?open.delete(id):open.add(id); store.set("jokedeck-open",[...open]); renderTree(); }
+function el(tag, cls, text){ const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e; }
+function foldBtn(id, has){
+  const b=el("button","fold"+(has?"":" none")); b.innerHTML="<span>▶</span>";
+  if(has){ b.setAttribute("aria-expanded", open.has(id)); b.setAttribute("aria-label", (open.has(id)?"Collapse":"Expand")); b.onclick=()=>toggleOpen(id); } else b.tabIndex=-1;
+  return b;
+}
+function addBtn(label, fn){ const b=el("button","tadd","+"); b.setAttribute("aria-label",label); b.title=label; b.onclick=fn; return b; }
+function delBtn(blockReason, fn){
+  const b=el("button","rm","Delete");
+  if(blockReason){ b.disabled=true; b.title=blockReason; b.textContent=blockReason; }
+  else b.onclick=()=>armThen(b,"Delete",fn);
+  return b;
+}
+function inlineRow(depth, placeholder, onSave){
+  const f=el("form","inl"); f.style.setProperty("--d",depth);
+  const i=el("input"); i.type="text"; i.placeholder=placeholder; i.maxLength=40; i.required=true; i.autocomplete="off"; i.id="inl-input";
+  const ok=el("button","ok","Add"); ok.type="submit";
+  const no=el("button","no","×"); no.type="button"; no.setAttribute("aria-label","Cancel"); no.onclick=()=>{ adding=null; renderTree(); };
+  f.append(i,ok,no);
+  f.onsubmit=e=>{ e.preventDefault(); const v=i.value.trim(); if(!v) return; const prev=adding; const err=onSave(v); if(err){ i.setCustomValidity(err); i.reportValidity(); setTimeout(()=>i.setCustomValidity(""),1500); return; } if(adding===prev) adding=null; save(); arrange(); render(false); renderTree(); };
+  setTimeout(()=>i.focus(),30);
+  return f;
+}
+const dup = (list, name) => list.some(x=>x.name.toLowerCase()===name.toLowerCase());
+
+function renderTree(){
+  const t=$("tree"); t.innerHTML="";
+  const V = vis();
+  const isSel = v => view.section===v.section && view.top===v.top && (view.sub||null)===(v.sub||null);
+
+  sections().forEach(s=>{
+    const secItems = V.filter(j=>j.section===s.id);
+    const r=el("div","trow sec"+(isSel({section:s.id,top:"All"})?" sel":"")); r.style.setProperty("--d",0);
+    r.append(foldBtn(s.id, true));
+    const nb=el("button","tname",s.name); nb.onclick=()=>go({section:s.id, top:"All", sub:null}); r.append(nb);
+    r.append(el("span","cnt",secItems.length));
+    if(editMode && !s.builtin) r.append(delBtn(kids(s.id).length?"Not empty":null, ()=>{ state.sections=state.sections.filter(x=>x.id!==s.id); save(); arrange(); render(true); renderTree(); }));
+    else r.append(addBtn("Add a category to "+s.name, ()=>{ adding={type:"cat", sec:s.id}; open.add(s.id); renderTree(); }));
+    t.append(r);
+    if(!open.has(s.id)) return;
+
+    const best=el("div","trow best"+(isSel({section:s.id,top:"Top"})?" sel":"")); best.style.setProperty("--d",1);
+    best.append(foldBtn(null,false));
+    const bb=el("button","tname","★ My best"); bb.onclick=()=>go({section:s.id, top:"Top", sub:null}); best.append(bb);
+    best.append(el("span","cnt",secItems.filter(j=>(state.ratings[j.id]||0)>=4).length));
+    t.append(best);
+
+    kids(s.id).forEach((c,ci)=>{
+      if(safe && isAdult(c.id)) return;
+      const subs = kids(s.id,c.id).filter(k=>!(safe&&isAdult(k.id)));
+      const cr=el("div","trow"+(isSel({section:s.id,top:c.id,sub:null})?" sel":"")); cr.style.setProperty("--d",1);
+      cr.append(foldBtn(c.id, subs.length>0));
+      const su=SUITS[ci%4]; const sp=el("span","suit"+((su==="♥"||su==="♦")?" red":""),su); cr.append(sp);
+      const cb=el("button","tname",c.name); cb.onclick=()=>go({section:s.id, top:c.id, sub:null}); cr.append(cb);
+      if(editMode && !c.builtin){ const a=el("button","tag18","18+"); a.setAttribute("aria-pressed",!!c.adult); a.title="Hide when Clean only is on"; a.onclick=()=>{ c.adult=!c.adult; save(); renderTree(); }; cr.append(a); }
+      else if(c.adult) cr.append(el("span","tag18","18+"));
+      cr.append(el("span","cnt",secItems.filter(j=>topOf(j.cat)===c.id).length));
+      if(editMode){ if(!c.builtin){ const n=items().filter(j=>j.cat===c.id).length; cr.append(delBtn(n||kids(s.id,c.id).length?"Not empty":null, ()=>{ state.cats=state.cats.filter(x=>x.id!==c.id); save(); arrange(); render(true); renderTree(); })); } }
+      else cr.append(addBtn("Add a subcategory to "+c.name, ()=>{ adding={type:"sub", sec:s.id, parent:c.id}; open.add(c.id); renderTree(); }));
+      t.append(cr);
+      if(open.has(c.id)){
+        subs.forEach(k=>{
+          const kr=el("div","trow"+(isSel({section:s.id,top:c.id,sub:k.id})?" sel":"")); kr.style.setProperty("--d",2);
+          kr.append(foldBtn(null,false));
+          const kb=el("button","tname",k.name); kb.onclick=()=>go({section:s.id, top:c.id, sub:k.id}); kr.append(kb);
+          if(editMode && !k.builtin){ const a=el("button","tag18","18+"); a.setAttribute("aria-pressed",!!k.adult); a.onclick=()=>{ k.adult=!k.adult; save(); renderTree(); }; kr.append(a); }
+          kr.append(el("span","cnt",secItems.filter(j=>j.cat===k.id).length));
+          if(editMode && !k.builtin){ const n=items().filter(j=>j.cat===k.id).length; kr.append(delBtn(n?"Not empty":null, ()=>{ state.cats=state.cats.filter(x=>x.id!==k.id); save(); arrange(); render(true); renderTree(); })); }
+          t.append(kr);
+        });
+      }
+      if(adding && adding.type==="sub" && adding.parent===c.id){
+        t.append(inlineRow(2, "New subcategory in "+c.name, name=>{
+          if(dup(kids(s.id,c.id),name)) return "That name already exists here";
+          state.cats.push({id:uid("k"), name, section:s.id, parent:c.id, adult:false}); open.add(c.id); store.set("jokedeck-open",[...open]);
+        }));
+      }
+    });
+    if(adding && adding.type==="cat" && adding.sec===s.id){
+      t.append(inlineRow(1, "New category in "+s.name, name=>{
+        if(dup(kids(s.id),name)) return "That name already exists here";
+        state.cats.push({id:uid("k"), name, section:s.id, parent:null, adult:false});
+      }));
+    }
+  });
+
+  if(adding && adding.type==="sec"){
+    t.append(inlineRow(0, "Section name, e.g. Shayari", name=>{
+      if(dup(sections(),name)) return "You already have that section";
+      const s={id:uid("s"), name}; state.sections.push(s); open.add(s.id); store.set("jokedeck-open",[...open]);
+      adding={type:"cat", sec:s.id};
+    }));
+  } else {
+    const ns=el("button","newsec","+ New section (Poems, Shayari…)"); ns.onclick=()=>{ adding={type:"sec"}; renderTree(); }; t.append(ns);
+  }
+  t.append(el("p","dnote", editMode ? "Edit mode: delete sections and categories you made once they're empty, and mark them 18+ so Clean only hides them." : "Tap ▶ to fold or unfold. Tap + on a section to add a category, or on a category to add a subcategory."));
+}
+function openDrawer(){ renderTree(); $("drawer").hidden=false; }
+function closeDrawer(){ $("drawer").hidden=true; adding=null; editMode=false; $("edit").setAttribute("aria-pressed",false); $("edit").textContent="Edit"; }
+$("menu").onclick=openDrawer; $("where").onclick=openDrawer;
+$("dclose").onclick=closeDrawer;
+$("drawer").onclick=e=>{ if(e.target.id==="drawer") closeDrawer(); };
+$("edit").onclick=()=>{ editMode=!editMode; adding=null; $("edit").setAttribute("aria-pressed",editMode); $("edit").textContent=editMode?"Done":"Edit"; renderTree(); };
+$("safe").checked=safe;
+$("safe").onchange=e=>{ safe=e.target.checked; store.set("jokedeck-safe", safe?1:0); arrange(); render(true); renderTree(); };
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(!$("sheet").hidden) $("sheet").hidden=true; else if(!$("drawer").hidden) closeDrawer(); } });
+
+/* ---------- add card ---------- */
+function fillSecSelect(){ const sel=$("f-sec"); sel.innerHTML=""; sections().forEach(s=>{ const o=el("option",null,s.name); o.value=s.id; sel.append(o); }); sel.value=view.section; }
+function fillCardCats(){
+  const sec=$("f-sec").value, sel=$("f-cat"); sel.innerHTML="";
+  kids(sec).forEach(c=>{
+    const o=el("option",null,c.name); o.value=c.id; sel.append(o);
+    kids(sec,c.id).forEach(k=>{ const o2=el("option",null,"  › "+k.name); o2.value=k.id; sel.append(o2); });
+  });
+  const pref = view.section===sec ? (view.sub || (view.top!=="All"&&view.top!=="Top" ? view.top : null)) : null;
+  if(pref && [...sel.options].some(o=>o.value===pref)) sel.value=pref;
+  const none = sel.options.length===0;
+  $("f-nocat").hidden=!none; sel.parentElement.hidden=none; $("f-submit").disabled=none;
+}
+function openSheet(){ fillSecSelect(); fillCardCats(); $("sheet").hidden=false; setTimeout(()=>$("f-q").focus(),30); }
+$("add").onclick=openSheet;
+$("f-sec").onchange=fillCardCats;
+$("f-cancel").onclick=()=>{ $("sheet").hidden=true; };
+$("sheet").onclick=e=>{ if(e.target.id==="sheet") $("sheet").hidden=true; };
+$("f-mkcat").onclick=()=>{ const s=$("f-sec").value; $("sheet").hidden=true; adding={type:"cat", sec:s}; open.add(s); openDrawer(); };
+$("form-card").onsubmit=e=>{
+  e.preventDefault();
+  const q=$("f-q").value.trim(), a=$("f-a").value.trim(), cat=$("f-cat").value, sec=$("f-sec").value;
+  if(!q||!cat) return;
+  const j={id:uid("c"), section:sec, cat, q, a, custom:true};
+  state.custom.push(j); save(); $("form-card").reset(); $("sheet").hidden=true;
+  const c=catById(cat); view={section:sec, top:c.parent||c.id, sub:c.parent?c.id:null};
+  if(safe && isAdult(cat)){ safe=false; $("safe").checked=false; store.set("jokedeck-safe",0); }
+  arrange(); order=[j].concat(order.filter(x=>x.id!==j.id)); render(true);
+};
+
+$("sort").onchange=e=>{ sortMode=e.target.value; arrange(); render(true); };
+
+/* ---------- saving ---------- */
+function snapshot(){ return {ratings:state.ratings, custom:state.custom, sections:state.sections, cats:state.cats}; }
+function save(){ store.set("jokedeck", snapshot()); }
+function setSync(t){ $("sync").textContent=t; }
+
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,2600); }
+
+/* ---------- backup ---------- */
+$("export").onclick=()=>{
+  const data=JSON.stringify({app:"flashdeck", version:1, exported:new Date().toISOString(), ...snapshot()}, null, 2);
+  const url=URL.createObjectURL(new Blob([data],{type:"application/json"}));
+  const a=document.createElement("a"); a.href=url; a.download="flashdeck-backup-"+new Date().toISOString().slice(0,10)+".json";
+  document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000);
+  toast("Backup saved to Downloads");
+};
+$("import").onclick=()=>$("importfile").click();
+$("importfile").onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  try{
+    const r=normalize(JSON.parse(await f.text()));
+    const merge=(a,b)=>{ const seen=new Set(b.map(x=>x.id)); return b.concat(a.filter(x=>!seen.has(x.id))); };
+    state={ratings:Object.assign({}, state.ratings, r.ratings), custom:merge(state.custom,r.custom), sections:merge(state.sections,r.sections), cats:merge(state.cats,r.cats)};
+    save(); arrange(); render(true); renderTree();
+    toast("Imported "+r.custom.length+" cards and "+Object.keys(r.ratings).length+" ratings");
+  }catch(err){ toast("That file isn't a FlashDeck backup"); }
+};
+
+/* ---------- start ---------- */
+(async function boot(){
+  try{
+    const res = await fetch("jokes.json");
+    loadBuiltins(await res.json());
+  }catch(e){ loadBuiltins([]); setSync("Couldn't load the built-in jokes. Your own cards are still here."); }
+  arrange(); render(true);
+  if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+})();
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+}
+</script>
+</body>
+</html>
