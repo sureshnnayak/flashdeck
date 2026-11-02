@@ -21,7 +21,7 @@ Pocket flashcards for jokes, poems and shayari. Swipe up for the next card, tap 
 | File | What it is |
 |---|---|
 | `index.html` | The whole app (HTML, CSS, JS) |
-| `jokes.json` | The 138 built-in jokes: `{id, cat, q, a, t}`. `t` holds tags; `clean` means it shows in Clean only |
+| `jokes.json` | The built-in jokes (about 30 per category): `{id, cat, q, a, t}`. `t` holds tags; `clean` means it shows in Clean only |
 | `manifest.json` | Name, icons and colors used when installing |
 | `sw.js` | Service worker that caches the app for offline use |
 | `icons/` | App icons |
