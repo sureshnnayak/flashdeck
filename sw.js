@@ -1,6 +1,6 @@
 // FlashDeck service worker: makes the app open offline.
 // Bump VERSION whenever you change files, so phones fetch the new copies.
-const VERSION = "flashdeck-v2";
+const VERSION = "flashdeck-v3";
 const CORE = [
   "./", "index.html", "jokes.json", "manifest.json",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png"
@@ -26,6 +26,15 @@ self.addEventListener("fetch", e => {
   const url = new URL(req.url);
   const isFont = /fonts\.(googleapis|gstatic)\.com$/.test(url.hostname);
   if (url.origin !== location.origin && !isFont) return;
+
+  // Your synced cards: always try the network first so new syncs show up right away.
+  if (url.origin === location.origin && url.pathname.endsWith("/my-deck.json")) {
+    e.respondWith(caches.open(VERSION).then(cache =>
+      fetch(req).then(res => { if (res.ok) cache.put(req, res.clone()); return res; })
+        .catch(() => cache.match(req, { ignoreSearch: true }))
+    ));
+    return;
+  }
 
   e.respondWith(
     caches.open(VERSION).then(async cache => {

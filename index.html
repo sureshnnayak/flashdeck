@@ -225,7 +225,7 @@ const store = { get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d
 
 function normalize(s){
   s = s||{};
-  const out = {ratings:s.ratings||{}, custom:s.custom||[], sections:s.sections||[], cats:s.cats||[]};
+  const out = {ratings:s.ratings||{}, custom:s.custom||[], sections:s.sections||[], cats:s.cats||[], deleted:s.deleted||[]};
   out.custom.forEach(j=>{ if(!j.section){ j.section="jokes"; if(j.cat && !j.cat.includes(":")) j.cat="b:"+j.cat; } });
   return out;
 }
@@ -322,7 +322,7 @@ function cardEl(j){
   foot.append(left); starRow(j,stars,label);
   if(j.custom){
     const d=document.createElement("button"); d.className="del"; d.textContent="Delete";
-    d.onclick=()=>armThen(d,"Delete",()=>{ state.custom=state.custom.filter(x=>x.id!==j.id); delete state.ratings[j.id]; save(); order=order.filter(x=>x.id!==j.id); render(false); });
+    d.onclick=()=>armThen(d,"Delete",()=>{ state.custom=state.custom.filter(x=>x.id!==j.id); delete state.ratings[j.id]; forget(j.id); save(); order=order.filter(x=>x.id!==j.id); render(false); });
     foot.append(d);
   }
   card.append(cat,body,foot); slot.append(card); return slot;
@@ -381,7 +381,7 @@ function renderTree(){
     r.append(foldBtn(s.id, true));
     const nb=el("button","tname",s.name); nb.onclick=()=>go({section:s.id, top:"All", sub:null}); r.append(nb);
     r.append(el("span","cnt",secItems.length));
-    if(editMode && !s.builtin) r.append(delBtn(kids(s.id).length?"Not empty":null, ()=>{ state.sections=state.sections.filter(x=>x.id!==s.id); save(); arrange(); render(true); renderTree(); }));
+    if(editMode && !s.builtin) r.append(delBtn(kids(s.id).length?"Not empty":null, ()=>{ state.sections=state.sections.filter(x=>x.id!==s.id); forget(s.id); save(); arrange(); render(true); renderTree(); }));
     else r.append(addBtn("Add a category to "+s.name, ()=>{ adding={type:"cat", sec:s.id}; open.add(s.id); renderTree(); }));
     t.append(r);
     if(!open.has(s.id)) return;
@@ -402,7 +402,7 @@ function renderTree(){
       if(editMode && !c.builtin){ const a=el("button","tag18","18+"); a.setAttribute("aria-pressed",!!c.adult); a.title="Hide when Clean only is on"; a.onclick=()=>{ c.adult=!c.adult; save(); renderTree(); }; cr.append(a); }
       else if(c.adult) cr.append(el("span","tag18","18+"));
       cr.append(el("span","cnt",secItems.filter(j=>topOf(j.cat)===c.id).length));
-      if(editMode){ if(!c.builtin){ const n=items().filter(j=>j.cat===c.id).length; cr.append(delBtn(n||kids(s.id,c.id).length?"Not empty":null, ()=>{ state.cats=state.cats.filter(x=>x.id!==c.id); save(); arrange(); render(true); renderTree(); })); } }
+      if(editMode){ if(!c.builtin){ const n=items().filter(j=>j.cat===c.id).length; cr.append(delBtn(n||kids(s.id,c.id).length?"Not empty":null, ()=>{ state.cats=state.cats.filter(x=>x.id!==c.id); forget(c.id); save(); arrange(); render(true); renderTree(); })); } }
       else cr.append(addBtn("Add a subcategory to "+c.name, ()=>{ adding={type:"sub", sec:s.id, parent:c.id}; open.add(c.id); renderTree(); }));
       t.append(cr);
       if(open.has(c.id)){
@@ -412,7 +412,7 @@ function renderTree(){
           const kb=el("button","tname",k.name); kb.onclick=()=>go({section:s.id, top:c.id, sub:k.id}); kr.append(kb);
           if(editMode && !k.builtin){ const a=el("button","tag18","18+"); a.setAttribute("aria-pressed",!!k.adult); a.onclick=()=>{ k.adult=!k.adult; save(); renderTree(); }; kr.append(a); }
           kr.append(el("span","cnt",secItems.filter(j=>j.cat===k.id).length));
-          if(editMode && !k.builtin){ const n=items().filter(j=>j.cat===k.id).length; kr.append(delBtn(n?"Not empty":null, ()=>{ state.cats=state.cats.filter(x=>x.id!==k.id); save(); arrange(); render(true); renderTree(); })); }
+          if(editMode && !k.builtin){ const n=items().filter(j=>j.cat===k.id).length; kr.append(delBtn(n?"Not empty":null, ()=>{ state.cats=state.cats.filter(x=>x.id!==k.id); forget(k.id); save(); arrange(); render(true); renderTree(); })); }
           t.append(kr);
         });
       }
@@ -485,7 +485,19 @@ $("form-card").onsubmit=e=>{
 $("sort").onchange=e=>{ sortMode=e.target.value; arrange(); render(true); };
 
 /* ---------- saving ---------- */
-function snapshot(){ return {ratings:state.ratings, custom:state.custom, sections:state.sections, cats:state.cats}; }
+function snapshot(){ return {ratings:state.ratings, custom:state.custom, sections:state.sections, cats:state.cats, deleted:state.deleted}; }
+/* Remember deletions so cards synced from my-deck.json don't come back on the next launch. */
+function forget(id){ if(!state.deleted.includes(id)) state.deleted.push(id); }
+/* my-deck.json in the repo holds your own cards, sections and ratings, merged in by Claude from your backups.
+   Anything in it that this device doesn't have yet (and you haven't deleted) gets added on launch. */
+function mergeSynced(r){
+  const gone=new Set(state.deleted); let added=0;
+  const add=(key)=>{ const have=new Set(state[key].map(x=>x.id)); r[key].forEach(x=>{ if(!have.has(x.id) && !gone.has(x.id)){ state[key].push(x); added++; } }); };
+  add("sections"); add("cats"); add("custom");
+  Object.entries(r.ratings).forEach(([id,v])=>{ if(!(id in state.ratings) && !gone.has(id)) state.ratings[id]=v; });
+  if(added) save();
+  return added;
+}
 function save(){ store.set("jokedeck", snapshot()); }
 function setSync(t){ $("sync").textContent=t; }
 
@@ -517,6 +529,10 @@ $("importfile").onchange=async e=>{
     const res = await fetch("jokes.json");
     loadBuiltins(await res.json());
   }catch(e){ loadBuiltins([]); setSync("Couldn't load the built-in jokes. Your own cards are still here."); }
+  try{
+    const res = await fetch("my-deck.json", {cache:"no-cache"});
+    if(res.ok){ const n = mergeSynced(normalize(await res.json())); if(n) toast("Synced "+n+" of your cards and categories"); }
+  }catch(e){}
   arrange(); render(true);
   if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
 })();
