@@ -1,30 +1,7 @@
 {
- "sections": [
-  {
-   "id": "sTEST",
-   "name": "Shayari"
-  }
- ],
- "cats": [
-  {
-   "id": "kTEST",
-   "name": "Dosti",
-   "section": "sTEST",
-   "parent": null,
-   "adult": false
-  }
- ],
- "custom": [
-  {
-   "id": "cTEST",
-   "section": "sTEST",
-   "cat": "kTEST",
-   "q": "Test line one\nTest line two",
-   "a": "",
-   "custom": true
-  }
- ],
- "ratings": {
-  "cTEST": 5
- }
+ "sections": [],
+ "cats": [],
+ "custom": [],
+ "ratings": {},
+ "deleted": ["cTEST", "kTEST", "sTEST"]
 }

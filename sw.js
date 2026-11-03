@@ -1,6 +1,6 @@
 // FlashDeck service worker: makes the app open offline.
 // Bump VERSION whenever you change files, so phones fetch the new copies.
-const VERSION = "flashdeck-v3";
+const VERSION = "flashdeck-v4";
 const CORE = [
   "./", "index.html", "jokes.json", "manifest.json",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png"

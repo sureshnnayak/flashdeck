@@ -126,6 +126,7 @@ button.tag18[aria-pressed="true"]{background:var(--red);border-color:var(--red);
 .inl input{flex:1;min-width:0;border:1px solid var(--felt);border-radius:10px;padding:9px 10px;font-size:16px;background:transparent;color:var(--ink)}
 .inl .ok{border:0;background:var(--felt);color:#eef4ef;border-radius:10px;padding:9px 12px;font-weight:600;cursor:pointer;flex:none}
 .inl .no{border:0;background:none;color:var(--muted);cursor:pointer;font-size:18px;width:30px;flex:none}
+.dscroll.editing .trow .cnt{display:none}
 .newsec{margin:10px 18px 0;border:1px dashed color-mix(in srgb,var(--ink) 35%,transparent);border-radius:12px;background:none;padding:12px;font-weight:600;color:var(--muted);cursor:pointer;width:calc(100% - 36px)}
 .dnote{font-size:12px;color:var(--muted);padding:8px 18px 0;line-height:1.45}
 
@@ -225,7 +226,7 @@ const store = { get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d
 
 function normalize(s){
   s = s||{};
-  const out = {ratings:s.ratings||{}, custom:s.custom||[], sections:s.sections||[], cats:s.cats||[], deleted:s.deleted||[]};
+  const out = {ratings:s.ratings||{}, custom:s.custom||[], sections:s.sections||[], cats:s.cats||[], deleted:s.deleted||[], applied:s.applied||[]};
   out.custom.forEach(j=>{ if(!j.section){ j.section="jokes"; if(j.cat && !j.cat.includes(":")) j.cat="b:"+j.cat; } });
   return out;
 }
@@ -236,8 +237,9 @@ let open = new Set(store.get("jokedeck-open", ["jokes"]));
 let sortMode="shuffle", order=[], revealed=new Set(), docRef=null, saveTimer=null, editMode=false, adding=null;
 
 const sections = () => BUILT_SECTIONS.concat(state.sections);
-const cats = () => BUILT_CATS.concat(state.cats);
-const items = () => BASE.concat(state.custom);
+const hiddenSet = () => new Set(state.deleted);
+const cats = () => { const g=hiddenSet(); return BUILT_CATS.filter(c=>!g.has(c.id)).concat(state.cats); };
+const items = () => { const g=hiddenSet(); return BASE.filter(j=>!g.has(j.id)).concat(state.custom); };
 const secById = id => sections().find(s=>s.id===id);
 const catById = id => cats().find(c=>c.id===id);
 const kids = (sec, parent) => cats().filter(c=>c.section===sec && (c.parent||null)===(parent||null));
@@ -320,11 +322,9 @@ function cardEl(j){
   const label=document.createElement("div"); label.className="rlabel";
   const left=document.createElement("div"); left.style.cssText="display:grid;gap:2px"; left.append(stars,label);
   foot.append(left); starRow(j,stars,label);
-  if(j.custom){
-    const d=document.createElement("button"); d.className="del"; d.textContent="Delete";
-    d.onclick=()=>armThen(d,"Delete",()=>{ state.custom=state.custom.filter(x=>x.id!==j.id); delete state.ratings[j.id]; forget(j.id); save(); order=order.filter(x=>x.id!==j.id); render(false); });
-    foot.append(d);
-  }
+  const d=document.createElement("button"); d.className="del"; d.textContent="Delete";
+  d.onclick=()=>armThen(d,"Delete",()=>{ removeCards([j.id]); save(); order=order.filter(x=>x.id!==j.id); render(false); toast("Card deleted"); });
+  foot.append(d);
   card.append(cat,body,foot); slot.append(card); return slot;
 }
 function render(toTop){
@@ -352,12 +352,28 @@ function foldBtn(id, has){
   return b;
 }
 function addBtn(label, fn){ const b=el("button","tadd","+"); b.setAttribute("aria-label",label); b.title=label; b.onclick=fn; return b; }
-function delBtn(blockReason, fn){
-  const b=el("button","rm","Delete");
-  if(blockReason){ b.disabled=true; b.title=blockReason; b.textContent=blockReason; }
-  else b.onclick=()=>armThen(b,"Delete",fn);
-  return b;
+function delBtn(label, fn){ const b=el("button","rm",label); b.onclick=()=>armThen(b,label,fn); return b; }
+const cardWord = n => n+(n===1?" card":" cards");
+/* Deleting: your own cards/categories are removed; built-in ones are hidden (listed in state.deleted) and can be restored. */
+function removeCards(ids){
+  const set=new Set(ids);
+  state.custom=state.custom.filter(x=>!set.has(x.id));
+  ids.forEach(id=>{ delete state.ratings[id]; forget(id); });
 }
+function deleteCategory(c){
+  const subIds = cats().filter(k=>k.parent===c.id).map(k=>k.id);
+  const all = new Set([c.id, ...subIds]);
+  removeCards(items().filter(j=>all.has(j.cat)).map(j=>j.id));
+  state.cats=state.cats.filter(x=>!all.has(x.id));
+  all.forEach(forget);
+}
+function deleteSection(s){
+  kids(s.id).forEach(deleteCategory);
+  removeCards(items().filter(j=>j.section===s.id).map(j=>j.id));
+  state.sections=state.sections.filter(x=>x.id!==s.id); forget(s.id);
+}
+function afterDelete(msg){ save(); arrange(); render(true); renderTree(); toast(msg); }
+function hiddenBuiltins(){ const g=hiddenSet(); return BASE.filter(j=>g.has(j.id)).length + BUILT_CATS.filter(c=>g.has(c.id)).length; }
 function inlineRow(depth, placeholder, onSave){
   const f=el("form","inl"); f.style.setProperty("--d",depth);
   const i=el("input"); i.type="text"; i.placeholder=placeholder; i.maxLength=40; i.required=true; i.autocomplete="off"; i.id="inl-input";
@@ -371,7 +387,7 @@ function inlineRow(depth, placeholder, onSave){
 const dup = (list, name) => list.some(x=>x.name.toLowerCase()===name.toLowerCase());
 
 function renderTree(){
-  const t=$("tree"); t.innerHTML="";
+  const t=$("tree"); t.innerHTML=""; t.classList.toggle("editing", editMode);
   const V = vis();
   const isSel = v => view.section===v.section && view.top===v.top && (view.sub||null)===(v.sub||null);
 
@@ -381,7 +397,7 @@ function renderTree(){
     r.append(foldBtn(s.id, true));
     const nb=el("button","tname",s.name); nb.onclick=()=>go({section:s.id, top:"All", sub:null}); r.append(nb);
     r.append(el("span","cnt",secItems.length));
-    if(editMode && !s.builtin) r.append(delBtn(kids(s.id).length?"Not empty":null, ()=>{ state.sections=state.sections.filter(x=>x.id!==s.id); forget(s.id); save(); arrange(); render(true); renderTree(); }));
+    if(editMode && !s.builtin){ const n=items().filter(j=>j.section===s.id).length; r.append(delBtn(n?"Delete ("+n+")":"Delete", ()=>{ deleteSection(s); afterDelete("Deleted "+s.name); })); }
     else r.append(addBtn("Add a category to "+s.name, ()=>{ adding={type:"cat", sec:s.id}; open.add(s.id); renderTree(); }));
     t.append(r);
     if(!open.has(s.id)) return;
@@ -402,7 +418,7 @@ function renderTree(){
       if(editMode && !c.builtin){ const a=el("button","tag18","18+"); a.setAttribute("aria-pressed",!!c.adult); a.title="Hide when Clean only is on"; a.onclick=()=>{ c.adult=!c.adult; save(); renderTree(); }; cr.append(a); }
       else if(c.adult) cr.append(el("span","tag18","18+"));
       cr.append(el("span","cnt",secItems.filter(j=>topOf(j.cat)===c.id).length));
-      if(editMode){ if(!c.builtin){ const n=items().filter(j=>j.cat===c.id).length; cr.append(delBtn(n||kids(s.id,c.id).length?"Not empty":null, ()=>{ state.cats=state.cats.filter(x=>x.id!==c.id); forget(c.id); save(); arrange(); render(true); renderTree(); })); } }
+      if(editMode){ const n=items().filter(j=>topOf(j.cat)===c.id).length; cr.append(delBtn(n?"Delete ("+n+")":"Delete", ()=>{ deleteCategory(c); afterDelete("Deleted "+c.name+(n?" and "+cardWord(n):"")); })); }
       else cr.append(addBtn("Add a subcategory to "+c.name, ()=>{ adding={type:"sub", sec:s.id, parent:c.id}; open.add(c.id); renderTree(); }));
       t.append(cr);
       if(open.has(c.id)){
@@ -412,7 +428,7 @@ function renderTree(){
           const kb=el("button","tname",k.name); kb.onclick=()=>go({section:s.id, top:c.id, sub:k.id}); kr.append(kb);
           if(editMode && !k.builtin){ const a=el("button","tag18","18+"); a.setAttribute("aria-pressed",!!k.adult); a.onclick=()=>{ k.adult=!k.adult; save(); renderTree(); }; kr.append(a); }
           kr.append(el("span","cnt",secItems.filter(j=>j.cat===k.id).length));
-          if(editMode && !k.builtin){ const n=items().filter(j=>j.cat===k.id).length; kr.append(delBtn(n?"Not empty":null, ()=>{ state.cats=state.cats.filter(x=>x.id!==k.id); forget(k.id); save(); arrange(); render(true); renderTree(); })); }
+          if(editMode){ const n=items().filter(j=>j.cat===k.id).length; kr.append(delBtn(n?"Delete ("+n+")":"Delete", ()=>{ deleteCategory(k); afterDelete("Deleted "+k.name+(n?" and "+cardWord(n):"")); })); }
           t.append(kr);
         });
       }
@@ -440,7 +456,11 @@ function renderTree(){
   } else {
     const ns=el("button","newsec","+ New section (Poems, Shayari…)"); ns.onclick=()=>{ adding={type:"sec"}; renderTree(); }; t.append(ns);
   }
-  t.append(el("p","dnote", editMode ? "Edit mode: delete sections and categories you made once they're empty, and mark them 18+ so Clean only hides them." : "Tap ▶ to fold or unfold. Tap + on a section to add a category, or on a category to add a subcategory."));
+  t.append(el("p","dnote", editMode ? "Edit mode: Delete removes a category, its subcategories and every card in them (tap twice to confirm). Mark your own categories 18+ so Clean only hides them." : "Tap ▶ to fold or unfold. Tap + on a section to add a category, or on a category to add a subcategory."));
+  if(editMode){
+    const h=hiddenBuiltins();
+    if(h){ const rb=el("button","newsec","Restore deleted built-in jokes ("+h+")"); rb.onclick=()=>armThen(rb, rb.textContent, ()=>{ const ids=new Set(BASE.map(j=>j.id).concat(BUILT_CATS.map(c=>c.id))); state.deleted=state.deleted.filter(id=>!ids.has(id)); afterDelete("Built-in jokes restored"); }); t.append(rb); }
+  }
 }
 function openDrawer(){ renderTree(); $("drawer").hidden=false; }
 function closeDrawer(){ $("drawer").hidden=true; adding=null; editMode=false; $("edit").setAttribute("aria-pressed",false); $("edit").textContent="Edit"; }
@@ -485,13 +505,22 @@ $("form-card").onsubmit=e=>{
 $("sort").onchange=e=>{ sortMode=e.target.value; arrange(); render(true); };
 
 /* ---------- saving ---------- */
-function snapshot(){ return {ratings:state.ratings, custom:state.custom, sections:state.sections, cats:state.cats, deleted:state.deleted}; }
+function snapshot(){ return {ratings:state.ratings, custom:state.custom, sections:state.sections, cats:state.cats, deleted:state.deleted, applied:state.applied}; }
 /* Remember deletions so cards synced from my-deck.json don't come back on the next launch. */
 function forget(id){ if(!state.deleted.includes(id)) state.deleted.push(id); }
 /* my-deck.json in the repo holds your own cards, sections and ratings, merged in by Claude from your backups.
    Anything in it that this device doesn't have yet (and you haven't deleted) gets added on launch. */
 function mergeSynced(r){
-  const gone=new Set(state.deleted); let added=0;
+  let added=0;
+  // Deletions from your other devices: apply each one once, so a later "Restore" here still sticks.
+  const applied=new Set(state.applied);
+  const fresh=(r.deleted||[]).filter(id=>!applied.has(id));
+  if(fresh.length){
+    const f=new Set(fresh);
+    state.custom=state.custom.filter(x=>!f.has(x.id)); state.cats=state.cats.filter(x=>!f.has(x.id)); state.sections=state.sections.filter(x=>!f.has(x.id));
+    fresh.forEach(id=>{ delete state.ratings[id]; forget(id); state.applied.push(id); }); added+=fresh.length;
+  }
+  const gone=new Set(state.deleted);
   const add=(key)=>{ const have=new Set(state[key].map(x=>x.id)); r[key].forEach(x=>{ if(!have.has(x.id) && !gone.has(x.id)){ state[key].push(x); added++; } }); };
   add("sections"); add("cats"); add("custom");
   Object.entries(r.ratings).forEach(([id,v])=>{ if(!(id in state.ratings) && !gone.has(id)) state.ratings[id]=v; });

@@ -11,7 +11,7 @@ Pocket flashcards for jokes, poems and shayari. Swipe up for the next card, tap 
 ## Using it
 
 - **☰** opens the menu: sections → categories → subcategories. Tap ▶ to fold, **+** to add a category or subcategory, **+ New section** for Poems, Shayari, etc.
-- **Edit** in the menu deletes your own empty sections and categories and marks them 18+.
+- **Delete** on any card removes it. **Edit** in the menu deletes any category or subcategory (with all its cards) and marks your own ones 18+. Tap Delete twice to confirm. Deleted built-in jokes can be brought back with **Restore deleted built-in jokes** in Edit mode.
 - **Clean only** hides 18+ categories (Dirty, Pickup lines and any you mark).
 - The yellow **+** adds a card. Leave **Back** empty for poems, so the full text shows.
 - **Export backup / Import backup** at the bottom of the menu. Your cards and ratings are stored on the phone, so export now and then.
